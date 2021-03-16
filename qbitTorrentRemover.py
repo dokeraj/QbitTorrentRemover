@@ -45,8 +45,7 @@ def postStatsToDiscord(torrentsToRemove):
 		webhook.execute()
 	except Exception as e:
 		print(f"Total size on disk removed: {str(size(totalSize, system=alternative))}")
-		print("ERROR: Discord webhook is not valid! Script will now exit!")
-		sys.exit(0)
+		print("WARNING: Discord webhook is not valid - or was not specified!")
 
 
 def processTorrents():
