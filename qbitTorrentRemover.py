@@ -57,7 +57,7 @@ def normalize_seconds(seconds: int):
 def postStatsToDiscord(torrentsToRemove):
     totalSize = 0
     for cTor in torrentsToRemove:
-        totalSize = totalSize + cTor.completed
+        totalSize = totalSize + cTor.torrent.completed
 
     webhook = DiscordWebhook(url=DISCORD_WEBHOOK, content="_____\n`Total size on disk removed:` **" + str(
         size(totalSize, system=alternative)) + "**")
