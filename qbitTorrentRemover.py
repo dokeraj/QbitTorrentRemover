@@ -65,7 +65,7 @@ def postStatsToDiscord(torrentsToRemove):
 
     for cTor in torrentsToRemove:
         if cTor.timeExceeded:
-            timeExceeded = f"   :small_orange_diamond: *Deleted due to max time of {normalize_seconds(QBIT_ABSOLUTE_TIME_DELAY)} exceeded; current ratio: {cTor.torrent.ratio}*"
+            timeExceeded = f"   :small_orange_diamond: *Max time of {normalize_seconds(QBIT_ABSOLUTE_TIME_DELAY)} exceeded*   :small_orange_diamond: *Ratio: {round(cTor.torrent.ratio, 2)}*"
             movieSize = str(size(cTor.torrent.completed, system=alternative))
             embed.add_embed_field(name=f":movie_camera: {cTor.torrent.name}", value=f":small_blue_diamond: {movieSize}{timeExceeded}",
                                   inline=False)
