@@ -1,4 +1,4 @@
-FROM python:3.9.2-alpine
+FROM python:alpine3.14
 
 RUN pip3 install qbittorrent-api
 RUN pip3 install discord-webhook

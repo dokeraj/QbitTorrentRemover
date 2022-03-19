@@ -90,13 +90,13 @@ def processTorrents():
 
     # remove only the torrents that have reached ratio of >=1.0 and have been completed for at least 1 hour, or completed torrents older than 1 week
     for torrent in qbt_client.torrents_info():
-        timeDiff = int(time.time()) - torrent.completion_on
-        if torrent.ratio >= QBIT_RATIO_TRESHOLD and torrent.completion_on != 0 and timeDiff >= QBIT_TIME_DELAY:
+        timeDiff = int(time.time()) - abs(torrent.completion_on)
+        if torrent.ratio >= QBIT_RATIO_TRESHOLD and torrent.completion_on > 0 and timeDiff >= QBIT_TIME_DELAY:
             if shouldDeleteOnTag(torrent):
                 torrentsToRemove.append(TorrentWrapper(torrent, False))
                 torrentsHashes.append(torrent.hash)
 
-        elif torrent.completion_on != 0 and timeDiff >= QBIT_ABSOLUTE_TIME_DELAY:
+        elif torrent.completion_on > 0 and timeDiff >= QBIT_ABSOLUTE_TIME_DELAY:
             if shouldDeleteOnTag(torrent):
                 torrentsToRemove.append(TorrentWrapper(torrent, True))
                 torrentsHashes.append(torrent.hash)
