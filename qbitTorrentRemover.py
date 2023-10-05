@@ -18,9 +18,7 @@ QBIT_ABSOLUTE_TIME_DELAY = int(os.environ.get('QBIT_ABSOLUTE_TIME_DELAY'))
 QBIT_TAGS = os.environ.get('QBIT_TAGS')
 QBIT_TRACKERS_WITH_RATIO_TRESHOLD = os.environ.get('QBIT_TRACKERS_WITH_RATIO_TRESHOLD')
 QBIT_ADD_TRACKERS_IN_TAGS = os.getenv("QBIT_ADD_TRACKERS_IN_TAGS", 'False').lower() in ('true', '1', 't', 'yes', 'y')
-QBIT_SET_DEFAULT_QBIT_RATIO = os.getenv("QBIT_SET_DEFAULT_QBIT_RATIO", 'False').lower() in (
-    'true', '1', 't', 'yes', 'y')
-QBIT_SET_TRACKERS_QBIT_RATIO = os.getenv("QBIT_SET_TRACKERS_QBIT_RATIO", 'False').lower() in (
+QBIT_SET_DEFAULT_QBIT_RATIO = os.getenv("QBIT_SET_DEFAULT_QBIT_RATIO", 'True').lower() in (
     'true', '1', 't', 'yes', 'y')
 CHECK_INTERVAL = int(os.environ.get('CHECK_INTERVAL'))
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK')
@@ -75,14 +73,13 @@ def createTrackersRatioFromEnv():
 
 
 # compare the torrent trackers with the trackers and ratio inpputed in the env var
-def shouldDeleteOnTrackerRatio(torrent, trackersSeedRatioList):
+def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
     for torTracker in torrent.trackers:
         for trackerSeedRatio in trackersSeedRatioList:
             if trackerSeedRatio.tracker in torTracker["url"]:
 
-                # set the ratio if the ENV QBIT_SET_TRACKERS_QBIT_RATIO is set to true
-                if QBIT_SET_TRACKERS_QBIT_RATIO:
-                    qbt_client.torrents_set_share_limits(str(trackerSeedRatio.ratio), -1, -1, torrent.hash)
+                # set the ratio that is in the
+                qbt_client.torrents_set_share_limits(str(trackerSeedRatio.ratio), -1, -1, torrent.hash)
 
                 # set the trackers url in the torrent's tag if the ENV QBIT_ADD_TRACKERS_IN_TAGS is set to true
                 if QBIT_ADD_TRACKERS_IN_TAGS:
@@ -90,9 +87,17 @@ def shouldDeleteOnTrackerRatio(torrent, trackersSeedRatioList):
                     torrent.removeTags(trackerSeedRatio.tracker)
                     torrent.addTags(trackerSeedRatio.tracker)
 
-                # if the ratio and the tracker are matched - return that this torrent is eligible for deletion
-                if torrent.ratio >= trackerSeedRatio.ratio:
-                    return True
+    shouldDeleteOnSetRatio(torrent)
+
+
+def shouldDeleteOnSetRatio(torrent):
+    maxRatio = torrent.info["max_ratio"]
+
+    if maxRatio == -1:
+        return False
+    elif torrent.ratio >= maxRatio:
+        return True
+
     return False
 
 
@@ -126,6 +131,9 @@ def postStatsToDiscord(torrentsToRemove):
     embed = DiscordEmbed(description='The following torrents were deleted:', color=3589207)
 
     for cTor in torrentsToRemove:
+        # get the current torrent ratio
+        curRatio = f":small_orange_diamond: *Ratio: {round(cTor.torrent.ratio, 2)}*"
+
         # add the tags in the message if they exists for the current torrent
         existingTags = qbt_client.torrents_info(torrent_hashes=cTor.torrent.hash)[0]["tags"]
         if existingTags:
@@ -134,7 +142,7 @@ def postStatsToDiscord(torrentsToRemove):
             existingTags = ""
 
         if cTor.timeExceeded:
-            timeExceeded = f"   :small_orange_diamond: *Max time of {normalize_seconds(QBIT_ABSOLUTE_TIME_DELAY)} exceeded*   :small_orange_diamond: *Ratio: {round(cTor.torrent.ratio, 2)}*"
+            timeExceeded = f"   :alarm_clock: *Max time of {normalize_seconds(QBIT_ABSOLUTE_TIME_DELAY)} exceeded*   {curRatio}"
             movieSize = str(size(cTor.torrent.completed, system=alternative))
             embed.add_embed_field(name=f":movie_camera: {cTor.torrent.name}",
                                   value=f":small_blue_diamond: {movieSize}{timeExceeded}{existingTags}",
@@ -142,7 +150,7 @@ def postStatsToDiscord(torrentsToRemove):
         else:
             movieSize = str(size(cTor.torrent.completed, system=alternative))
             embed.add_embed_field(name=f":movie_camera: {cTor.torrent.name}",
-                                  value=f":small_blue_diamond: {movieSize}{existingTags}",
+                                  value=f":small_blue_diamond: {movieSize}{curRatio}{existingTags}",
                                   inline=False)
 
     embed.set_timestamp()
@@ -167,16 +175,11 @@ def processTorrents(trackersSeedRatioList):
         if QBIT_SET_DEFAULT_QBIT_RATIO:
             qbt_client.torrents_set_share_limits(str(QBIT_RATIO_TRESHOLD), -1, -1, torrent.hash)
 
-        if shouldDeleteOnTrackerRatio(torrent,
-                                      trackersSeedRatioList) and torrent.completion_on > 0 and timeDiff >= QBIT_TIME_DELAY:
+        if shouldDeleteOnTrackerRatioOrPresetRatio(torrent,
+                                                   trackersSeedRatioList) and torrent.completion_on > 0 and timeDiff >= QBIT_TIME_DELAY:
             if shouldDeleteOnTag(torrent):
                 torrentsToRemove.append(TorrentWrapper(torrent, False))
                 torrentsHashes.append(torrent.hash)
-        elif torrent.ratio >= QBIT_RATIO_TRESHOLD and torrent.completion_on > 0 and timeDiff >= QBIT_TIME_DELAY:
-            if shouldDeleteOnTag(torrent):
-                torrentsToRemove.append(TorrentWrapper(torrent, False))
-                torrentsHashes.append(torrent.hash)
-
         elif torrent.completion_on > 0 and timeDiff >= QBIT_ABSOLUTE_TIME_DELAY:
             if shouldDeleteOnTag(torrent):
                 torrentsToRemove.append(TorrentWrapper(torrent, True))
