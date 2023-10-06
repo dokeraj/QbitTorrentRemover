@@ -87,7 +87,7 @@ def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
                     torrent.removeTags(trackerSeedRatio.tracker)
                     torrent.addTags(trackerSeedRatio.tracker)
 
-    shouldDeleteOnSetRatio(torrent)
+    return shouldDeleteOnSetRatio(torrent)
 
 
 def shouldDeleteOnSetRatio(torrent):
