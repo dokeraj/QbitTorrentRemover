@@ -97,8 +97,8 @@ def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
                 # set the trackers url in the torrent's tag if the ENV QBIT_ADD_TRACKERS_IN_TAGS is set to true
                 if QBIT_ADD_TRACKERS_IN_TAGS:
                     # add the tag (first remove it if it has it - then add it)
-                    torrent.removeTags(trackerSeedRatio.tracker)
-                    torrent.addTags(trackerSeedRatio.tracker)
+                    torrent.removeTags(trackerSeedRatio.alias)
+                    torrent.addTags(trackerSeedRatio.alias)
 
     return shouldDeleteOnSetRatio(torrent)
 
