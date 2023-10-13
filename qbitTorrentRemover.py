@@ -2,6 +2,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass
+from typing import Optional
 
 import qbittorrentapi
 from discord_webhook import DiscordWebhook, DiscordEmbed
@@ -34,6 +35,7 @@ class TorrentWrapper:
 class TrackerRatio:
     tracker: str
     ratio: float
+    alias: Optional[str]
 
 
 print("Starting Script..")
@@ -47,27 +49,38 @@ if QBIT_TAGS != '':
 
 # create the dataclass TrackerRatio that will be used later to make the comparisons
 def createTrackersRatioFromEnv():
+    def returnTrackerAndRatio(rest):
+        trackerAndRatio = rest.split("@")
+        tracker = trackerAndRatio[0]
+        if len(trackerAndRatio) != 2:
+            print(
+                "ERR: ENV var TRACKERS_SEED_RATIO is not set properly - you need to make it in the following format:\n TRACKER_NAME1#TRACKER_ALIAS1@RATIO1;TRACKERNAME2@RATIO2\nWhere the TRACKERNAME is the domain of the tracker from the tracker url string (ex. torrentleech.org) and the RATIO is a decimal number (ex. 1.3). The TRACKER_ALIAS is optional and it's the display name in the torrent's tags.\nNow exiting app!")
+            sys.exit(0)
+
+        ratio = 0.0
+        try:
+            ratio = float(trackerAndRatio[1])
+        except ValueError:
+            print(
+                "ERR: ENV var TRACKERS_SEED_RATIO is not set properly - you need to set the ratio to be a decimal number like 2.3 for example. Now exiting app!")
+            sys.exit(0)
+
+        return tracker, ratio
+
     trackersRatioList = []
     # don't populate the list if the user didn't use this env var
     if QBIT_TRACKERS_WITH_RATIO_TRESHOLD == "":
         return trackersRatioList
 
     for tracker in QBIT_TRACKERS_WITH_RATIO_TRESHOLD.split(";"):
-        trackerUrlAndRatio = tracker.split("@")
-        if len(trackerUrlAndRatio) != 2:
-            print(
-                "ERR: ENV var TRACKERS_SEED_RATIO is not set properly - you need to make it in the following format:\n TRACKERNAME1@RATIO;TRACKERNAME2@RATIO\nWhere the TRACKERNAME is the name of the tracker (ex. torrentleech) and the RATIO is a decimal number (ex. 1.3)\nNow exiting app!")
-            sys.exit(0)
-
-        ratio = 0.0
-        try:
-            ratio = float(trackerUrlAndRatio[1])
-        except ValueError:
-            print(
-                "ERR: ENV var TRACKERS_SEED_RATIO is not set properly - you need to set the ratio to be a decimal number like 2.3 for example. Now exiting app!")
-            sys.exit(0)
-
-        trackersRatioList.append(TrackerRatio(str(trackerUrlAndRatio[0]), ratio))
+        if "#" in tracker:
+            trackerName = tracker.split("#")[0]
+            rest = tracker.split("#")[1]
+            trackerAlias, ratio = returnTrackerAndRatio(rest)
+            trackersRatioList.append(TrackerRatio(str(trackerName), ratio, trackerAlias))
+        else:
+            trackerName, ratio = returnTrackerAndRatio(tracker)
+            trackersRatioList.append(TrackerRatio(str(trackerName), ratio, None))
 
     return trackersRatioList
 
@@ -132,7 +145,7 @@ def postStatsToDiscord(torrentsToRemove):
 
     for cTor in torrentsToRemove:
         # get the current torrent ratio
-        curRatio = f":small_orange_diamond: *Ratio: {round(cTor.torrent.ratio, 2)}*"
+        curRatio = f":small_orange_diamond:*Ratio: {round(cTor.torrent.ratio, 2)}*"
 
         # add the tags in the message if they exists for the current torrent
         existingTags = qbt_client.torrents_info(torrent_hashes=cTor.torrent.hash)[0]["tags"]
