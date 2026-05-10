@@ -92,7 +92,13 @@ def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
             if trackerSeedRatio.tracker in torTracker["url"]:
 
                 # set the ratio that is in the
-                qbt_client.torrents_set_share_limits(str(trackerSeedRatio.ratio), -1, -1, torrent.hash)
+                qbt_client.torrents_set_share_limits(
+                    ratio_limit=str(QBIT_RATIO_TRESHOLD),
+                    seeding_time_limit=-1,
+                    inactive_seeding_time_limit=-1,
+                    share_limit_action='Stop',
+                    torrent_hashes=torrent.hash,
+                )
 
                 # set the trackers url in the torrent's tag if the ENV QBIT_ADD_TRACKERS_IN_TAGS is set to true
                 if QBIT_ADD_TRACKERS_IN_TAGS:
@@ -186,7 +192,13 @@ def processTorrents(trackersSeedRatioList):
 
         # set the ratio if the ENV QBIT_SET_DEFAULT_QBIT_RATIO is set to true
         if QBIT_SET_DEFAULT_QBIT_RATIO:
-            qbt_client.torrents_set_share_limits(str(QBIT_RATIO_TRESHOLD), -1, -1, torrent.hash)
+            qbt_client.torrents_set_share_limits(
+                ratio_limit=str(QBIT_RATIO_TRESHOLD),
+                seeding_time_limit=-1,
+                inactive_seeding_time_limit=-1,
+                share_limit_action='Stop',
+                torrent_hashes=torrent.hash,
+            )
 
         if shouldDeleteOnTrackerRatioOrPresetRatio(torrent,
                                                    trackersSeedRatioList) and torrent.completion_on > 0 and timeDiff >= QBIT_TIME_DELAY:
