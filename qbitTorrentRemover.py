@@ -93,7 +93,7 @@ def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
 
                 # set the ratio that is in the
                 qbt_client.torrents_set_share_limits(
-                    ratio_limit=str(QBIT_RATIO_TRESHOLD),
+                    ratio_limit=str(trackerSeedRatio.ratio),
                     seeding_time_limit=-1,
                     inactive_seeding_time_limit=-1,
                     share_limit_action='Stop',
