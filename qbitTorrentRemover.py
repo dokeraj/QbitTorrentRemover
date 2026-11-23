@@ -23,6 +23,9 @@ QBIT_SET_DEFAULT_QBIT_RATIO = os.getenv("QBIT_SET_DEFAULT_QBIT_RATIO", 'True').l
     'true', '1', 't', 'yes', 'y')
 CHECK_INTERVAL = int(os.environ.get('CHECK_INTERVAL'))
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK')
+# how many consecutive failures before giving up, and seconds to wait between retries
+MAX_RETRIES = 3
+RETRY_DELAY = 60
 
 
 @dataclass
@@ -85,6 +88,33 @@ def createTrackersRatioFromEnv():
     return trackersRatioList
 
 
+# qBittorrent 5.3+ requires share_limits_mode (needs qbittorrent-api >= 2026.10.1).
+# "Default" = keep qBittorrent's own setting, so behaviour is unchanged.
+def set_share_limits(ratio, torrent_hash):
+    qbt_client.torrents_set_share_limits(
+        ratio_limit=str(ratio),
+        seeding_time_limit=-1,
+        inactive_seeding_time_limit=-1,
+        share_limit_action='Stop',
+        share_limits_mode='Default',
+        torrent_hashes=torrent_hash,
+    )
+
+
+def postErrorToDiscord(title, message, color=15158332):  # red
+    if not DISCORD_WEBHOOK or DISCORD_WEBHOOK == "xxx":
+        return
+    try:
+        webhook = DiscordWebhook(url=DISCORD_WEBHOOK)
+        embed = DiscordEmbed(title=title, description=message[:4000], color=color)
+        embed.set_footer(text="qbittorrent-remover")
+        embed.set_timestamp()
+        webhook.add_embed(embed)
+        webhook.execute()
+    except Exception as e:
+        print(f"WARNING: could not send Discord error notification: {e}")
+
+
 # compare the torrent trackers with the trackers and ratio inpputed in the env var
 def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
     for torTracker in torrent.trackers:
@@ -92,13 +122,7 @@ def shouldDeleteOnTrackerRatioOrPresetRatio(torrent, trackersSeedRatioList):
             if trackerSeedRatio.tracker in torTracker["url"]:
 
                 # set the ratio that is in the
-                qbt_client.torrents_set_share_limits(
-                    ratio_limit=str(trackerSeedRatio.ratio),
-                    seeding_time_limit=-1,
-                    inactive_seeding_time_limit=-1,
-                    share_limit_action='Stop',
-                    torrent_hashes=torrent.hash,
-                )
+                set_share_limits(trackerSeedRatio.ratio, torrent.hash)
 
                 # set the trackers url in the torrent's tag if the ENV QBIT_ADD_TRACKERS_IN_TAGS is set to true
                 if QBIT_ADD_TRACKERS_IN_TAGS:
@@ -192,13 +216,7 @@ def processTorrents(trackersSeedRatioList):
 
         # set the ratio if the ENV QBIT_SET_DEFAULT_QBIT_RATIO is set to true
         if QBIT_SET_DEFAULT_QBIT_RATIO:
-            qbt_client.torrents_set_share_limits(
-                ratio_limit=str(QBIT_RATIO_TRESHOLD),
-                seeding_time_limit=-1,
-                inactive_seeding_time_limit=-1,
-                share_limit_action='Stop',
-                torrent_hashes=torrent.hash,
-            )
+            set_share_limits(QBIT_RATIO_TRESHOLD, torrent.hash)
 
         if shouldDeleteOnTrackerRatioOrPresetRatio(torrent,
                                                    trackersSeedRatioList) and torrent.completion_on > 0 and timeDiff >= QBIT_TIME_DELAY:
@@ -231,23 +249,39 @@ def shouldDeleteOnTag(torrent):
 
 
 def main():
-    try:
-        print("Trying to login to QbitTorrent...")
-        qbt_client.auth_log_in()
-        trackersSeedRatioList = createTrackersRatioFromEnv()
-        print("Successfuly connected to QbitTorrent. Listening for potential torrents to delete..")
-        while True:
-            processTorrents(trackersSeedRatioList)
-            time.sleep(CHECK_INTERVAL)
-    except qbittorrentapi.LoginFailed as e:
-        print("Invalid login credentials - please check your login credentials - the script will now exit!")
-        sys.exit(0)
-    except Exception as e:
-        print(
-            "Cannot find qbitTorrent! Please check to see if the webUI has been enabled. If running a docker container, check to see if it's alive. The script will check availability in 1 minute. ",
-            e)
-        time.sleep(60)
-        main()
+    trackersSeedRatioList = createTrackersRatioFromEnv()
+    failures = 0
+
+    while True:
+        try:
+            print("Trying to login to QbitTorrent...")
+            qbt_client.auth_log_in()
+            print("Successfuly connected to QbitTorrent. Listening for potential torrents to delete..")
+            while True:
+                processTorrents(trackersSeedRatioList)
+                failures = 0
+                time.sleep(CHECK_INTERVAL)
+        except qbittorrentapi.LoginFailed:
+            msg = "Invalid login credentials - please check your login credentials - the script will now exit!"
+            print(msg)
+            postErrorToDiscord(":x: qbitremover stopped", msg)
+            sys.exit(0)
+        except Exception as e:
+            failures += 1
+            err = f"{type(e).__name__}: {e}"
+            print(f"ERROR (attempt {failures}/{MAX_RETRIES}): {err}")
+
+            # one Discord message per error streak (not on every retry)
+            if failures == 1:
+                postErrorToDiscord(":warning: qbitremover error",
+                                   f"Will retry {MAX_RETRIES - 1} more time(s), then stop.\n```{err}```")
+
+            if failures >= MAX_RETRIES:
+                print(f"Failed {failures} times in a row - giving up. Start the container again once fixed.")
+                # exit code 0 so `restart: on-failure` does NOT restart the container
+                sys.exit(0)
+            print(f"Retrying in {RETRY_DELAY} seconds...")
+            time.sleep(RETRY_DELAY)
 
 
 main()
